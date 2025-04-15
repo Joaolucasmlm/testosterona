@@ -8,7 +8,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, roc_curve
 from xgboost import XGBClassifier
-from imblearn.over_sampling import SMOTE
 
 # Título
 st.set_page_config(page_title="Preditor de Testosterona Baixa", layout="centered")
@@ -38,12 +37,9 @@ if arquivo:
     selected_features = selector.get_support(indices=True)
     selected_names = X.columns[selected_features]
 
-    # Balanceamento com SMOTE
-    X_res, y_res = SMOTE(random_state=42).fit_resample(X_selected, y)
-
     # Divisão
     from sklearn.model_selection import train_test_split
-    X_train, X_test, y_train, y_test = train_test_split(X_res, y_res, test_size=0.3, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.3, random_state=42)
 
     # Modelos
     rf_model = RandomForestClassifier(random_state=42, class_weight='balanced')
