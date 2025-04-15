@@ -7,7 +7,14 @@ from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, roc_curve
+from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
 from xgboost import XGBClassifier
+
+try:
+    from imblearn.over_sampling import SMOTE
+    smote_disponivel = True
+except ImportError:
+    smote_disponivel = False
 
 # Título
 st.set_page_config(page_title="Preditor de Testosterona Baixa", layout="centered")
@@ -37,19 +44,36 @@ if arquivo:
     selected_features = selector.get_support(indices=True)
     selected_names = X.columns[selected_features]
 
+    X_selected_df = pd.DataFrame(X_selected, columns=selected_names)
+
+    if smote_disponivel:
+        X_resampled, y_resampled = SMOTE(random_state=42).fit_resample(X_selected_df, y)
+        st.info("✅ Dados balanceados com SMOTE.")
+    else:
+        X_resampled, y_resampled = X_selected_df, y
+        st.warning("⚠️ SMOTE não disponível. Os dados não foram balanceados.")
+
     # Divisão
-    from sklearn.model_selection import train_test_split
-    X_train, X_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.3, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
 
     # Modelos
     rf_model = RandomForestClassifier(random_state=42, class_weight='balanced')
-    rf_model.fit(X_train, y_train)
-
     log_model = LogisticRegression()
-    log_model.fit(X_train, y_train)
-
     xgb_model = XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42)
-    xgb_model.fit(X_train, y_train)
+
+    modelos = {
+        "Random Forest": rf_model,
+        "Regressão Logística": log_model,
+        "XGBoost": xgb_model
+    }
+
+    # Treinamento + Cross-validation
+    st.subheader("📊 AUC por Validação Cruzada (5-Fold)")
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    for nome, modelo in modelos.items():
+        scores = cross_val_score(modelo, X_resampled, y_resampled, cv=skf, scoring='roc_auc')
+        st.write(f"{nome}: AUC média = {scores.mean():.4f} ± {scores.std():.4f}")
+        modelo.fit(X_train, y_train)
 
     # ROC
     y_rf = rf_model.predict_proba(X_test)[:, 1]
