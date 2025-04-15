@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split, RandomizedSearchCV
-from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+from sklearn.model_selection import train_test_split, RandomizedSearchCV, cross_val_score
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, classification_report
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest, f_classif
@@ -29,31 +29,54 @@ if uploaded_file is not None:
             df["testo_baixa"] = (df["testosterona"] < 350).astype(int)
             df["tg_hdl_ratio"] = df["triglicerideos"] / df["hdl"]
 
+            # Pontuação tipo nomograma
+            df["wc_pts"] = (df["circ_abdominal"] >= 102).astype(int)
+            df["hdl_pts"] = (df["hdl"] < 40).astype(int) * 2
+            df["has_pts"] = (df["pressao_sistolica"] >= 130).astype(int)
+            df["tgl_pts"] = (df["triglicerideos"] >= 150).astype(int)
+            df["glu_pts"] = (df["glicemia"] >= 100).astype(int)
+            df["score_total"] = df[["wc_pts", "hdl_pts", "has_pts", "tgl_pts", "glu_pts"]].sum(axis=1)
+
+            st.subheader("📏 Escore Simplificado do Paciente")
+            fig_score, ax_score = plt.subplots(figsize=(10, 1.5))
+            ax_score.hlines(y=1, xmin=0, xmax=23, color='lightgray')
+            ax_score.vlines(x=df["score_total"].mean(), ymin=0.9, ymax=1.1, color='blue', label=f"Média = {df['score_total'].mean():.1f}")
+            ax_score.set_xlim(0, 23)
+            ax_score.set_yticks([])
+            ax_score.set_xlabel("Total Score")
+            ax_score.set_title("Distribuição do Escore Clínico (WC, HDL, HAS, TGL, Glicemia)")
+            ax_score.legend()
+            st.pyplot(fig_score)
+
             X = df[["circ_abdominal", "hdl", "triglicerideos", "pressao_sistolica", "glicemia", "tg_hdl_ratio"]]
             y = df["testo_baixa"]
 
             scaler = StandardScaler()
             X_scaled = scaler.fit_transform(X)
-
-            # Feature selection
             X_selected = SelectKBest(score_func=f_classif, k='all').fit_transform(X_scaled, y)
 
             X_train, X_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.3, random_state=42)
 
-            # Modelos para ensemble
             rf = RandomForestClassifier(random_state=42)
             xgb = XGBClassifier(use_label_encoder=False, eval_metric='logloss')
 
-            ensemble = VotingClassifier(estimators=[('rf', rf), ('xgb', xgb)], voting='soft')
+            rf.fit(X_train, y_train)
+            xgb.fit(X_train, y_train)
+
+            rf_auc = roc_auc_score(y_test, rf.predict_proba(X_test)[:, 1])
+            xgb_auc = roc_auc_score(y_test, xgb.predict_proba(X_test)[:, 1])
+
+            st.subheader("📈 AUC Individual dos Modelos")
+            st.markdown(f"**RandomForest AUC:** `{rf_auc:.3f}`")
+            st.markdown(f"**XGBoost AUC:** `{xgb_auc:.3f}`")
 
             param_dist = {
-                'rf__n_estimators': randint(100, 300),
-                'rf__max_depth': [5, 10, 15, None],
-                'rf__min_samples_split': randint(2, 10),
-                'rf__min_samples_leaf': randint(1, 5)
+                'n_estimators': randint(100, 300),
+                'max_depth': [5, 10, 15, None],
+                'min_samples_split': randint(2, 10),
+                'min_samples_leaf': randint(1, 5)
             }
-
-            grid = RandomizedSearchCV(estimator=ensemble, param_distributions=param_dist, n_iter=10, cv=3, scoring='roc_auc', random_state=42, n_jobs=-1)
+            grid = RandomizedSearchCV(estimator=rf, param_distributions=param_dist, n_iter=30, cv=5, scoring='roc_auc', random_state=42, n_jobs=-1)
             grid.fit(X_train, y_train)
             best_model = grid.best_estimator_
 
@@ -62,8 +85,11 @@ if uploaded_file is not None:
             auc = roc_auc_score(y_test, y_proba)
             fpr, tpr, _ = roc_curve(y_test, y_proba)
 
-            st.subheader("📊 Resultados do Modelo")
-            st.markdown(f"**AUC:** `{auc:.3f}`")
+            cv_score = cross_val_score(best_model, X_scaled, y, cv=5, scoring='roc_auc')
+
+            st.subheader("📊 Resultados do Melhor Modelo (RandomForest)")
+            st.markdown(f"**AUC Teste:** `{auc:.3f}`")
+            st.markdown(f"**AUC Média (Validação Cruzada):** `{cv_score.mean():.3f}`")
             st.markdown(f"**Melhores Parâmetros:** `{grid.best_params_}`")
 
             fig_roc, ax_roc = plt.subplots()
@@ -91,7 +117,7 @@ if uploaded_file is not None:
             st.subheader("🔍 Importância das Variáveis")
             importancias = pd.DataFrame({
                 "Variavel": X.columns,
-                "Importancia": best_model.named_estimators_["rf"].feature_importances_
+                "Importancia": best_model.feature_importances_
             }).sort_values(by="Importancia", ascending=False)
             st.dataframe(importancias.style.format({"Importancia": "{:.3f}"}))
 
