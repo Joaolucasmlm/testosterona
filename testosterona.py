@@ -2,11 +2,14 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.ensemble import RandomForestClassifier
+import seaborn as sns
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, classification_report
 from sklearn.preprocessing import StandardScaler
-import seaborn as sns
+from sklearn.feature_selection import SelectKBest, f_classif
+from xgboost import XGBClassifier
+from scipy.stats import randint
 
 st.set_page_config(page_title="Preditor de Testosterona Baixa", layout="centered")
 st.title("🧬 Preditor de Testosterona Baixa")
@@ -32,15 +35,25 @@ if uploaded_file is not None:
             scaler = StandardScaler()
             X_scaled = scaler.fit_transform(X)
 
-            X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.3, random_state=42)
+            # Feature selection
+            X_selected = SelectKBest(score_func=f_classif, k='all').fit_transform(X_scaled, y)
 
-            param_grid = {
-                'n_estimators': [100, 200],
-                'max_depth': [5, 10, None],
-                'min_samples_split': [2, 5],
-                'min_samples_leaf': [1, 2]
+            X_train, X_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.3, random_state=42)
+
+            # Modelos para ensemble
+            rf = RandomForestClassifier(random_state=42)
+            xgb = XGBClassifier(use_label_encoder=False, eval_metric='logloss')
+
+            ensemble = VotingClassifier(estimators=[('rf', rf), ('xgb', xgb)], voting='soft')
+
+            param_dist = {
+                'rf__n_estimators': randint(100, 300),
+                'rf__max_depth': [5, 10, 15, None],
+                'rf__min_samples_split': randint(2, 10),
+                'rf__min_samples_leaf': randint(1, 5)
             }
-            grid = GridSearchCV(RandomForestClassifier(random_state=42), param_grid, cv=3, scoring='roc_auc', n_jobs=-1)
+
+            grid = RandomizedSearchCV(estimator=ensemble, param_distributions=param_dist, n_iter=10, cv=3, scoring='roc_auc', random_state=42, n_jobs=-1)
             grid.fit(X_train, y_train)
             best_model = grid.best_estimator_
 
@@ -78,11 +91,12 @@ if uploaded_file is not None:
             st.subheader("🔍 Importância das Variáveis")
             importancias = pd.DataFrame({
                 "Variavel": X.columns,
-                "Importancia": best_model.feature_importances_
+                "Importancia": best_model.named_estimators_["rf"].feature_importances_
             }).sort_values(by="Importancia", ascending=False)
             st.dataframe(importancias.style.format({"Importancia": "{:.3f}"}))
 
     except Exception as e:
         st.error(f"Erro ao processar o arquivo: {e}")
+        st.exception(e)
 else:
     st.info("Envie um arquivo Excel com os dados para iniciar.")
