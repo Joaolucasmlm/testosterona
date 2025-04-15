@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split, RandomizedSearchCV, cross_val_score
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, classification_report
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest, f_classif
@@ -85,6 +86,16 @@ if uploaded_file is not None:
             auc = roc_auc_score(y_test, y_proba)
             fpr, tpr, _ = roc_curve(y_test, y_proba)
 
+            # Regressão logística com score_total
+            X_score = df[["score_total"]]
+            y_score = df["testo_baixa"]
+            X_score_train, X_score_test, y_score_train, y_score_test = train_test_split(X_score, y_score, test_size=0.3, random_state=42)
+            log_model = LogisticRegression()
+            log_model.fit(X_score_train, y_score_train)
+            y_log_proba = log_model.predict_proba(X_score_test)[:, 1]
+            fpr_log, tpr_log, _ = roc_curve(y_score_test, y_log_proba)
+            auc_log = roc_auc_score(y_score_test, y_log_proba)
+
             cv_score = cross_val_score(best_model, X_scaled, y, cv=5, scoring='roc_auc')
 
             st.subheader("📊 Resultados do Melhor Modelo (RandomForest)")
@@ -93,11 +104,12 @@ if uploaded_file is not None:
             st.markdown(f"**Melhores Parâmetros:** `{grid.best_params_}`")
 
             fig_roc, ax_roc = plt.subplots()
-            ax_roc.plot(fpr, tpr, label=f"ROC (AUC = {auc:.2f})")
+            ax_roc.plot(fpr, tpr, label=f"RandomForest ROC (AUC = {auc:.2f})")
+            ax_roc.plot(fpr_log, tpr_log, label=f"Logística Escore ROC (AUC = {auc_log:.2f})", linestyle='--')
             ax_roc.plot([0, 1], [0, 1], 'k--')
             ax_roc.set_xlabel("Falso-positivo")
             ax_roc.set_ylabel("Verdadeiro-positivo")
-            ax_roc.set_title("Curva ROC")
+            ax_roc.set_title("Curva ROC - Comparação de Modelos")
             ax_roc.legend(loc="lower right")
             st.pyplot(fig_roc)
 
