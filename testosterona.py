@@ -25,82 +25,83 @@ st.sidebar.header("📂 Carregar Planilha Excel")
 arquivo = st.sidebar.file_uploader("Escolha o arquivo .xlsx", type=["xlsx"])
 
 if arquivo:
-    df = pd.read_excel(arquivo)
-    st.success("Arquivo carregado com sucesso!")
+    with st.spinner("⏳ Processando e treinando os modelos..."):
+        df = pd.read_excel(arquivo)
+        st.success("Arquivo carregado com sucesso!")
 
-    # Pré-processamento
-    df["testo_baixa"] = (df["testosterona"] < 350).astype(int)
-    df["tg_hdl_ratio"] = df["triglicerideos"] / df["hdl"]
+        # Pré-processamento
+        df["testo_baixa"] = (df["testosterona"] < 350).astype(int)
+        df["tg_hdl_ratio"] = df["triglicerideos"] / df["hdl"]
 
-    feature_cols = ["circ_abdominal", "hdl", "triglicerideos", "pressao_sistolica", "glicemia", "tg_hdl_ratio"]
-    X = df[feature_cols]
-    y = df["testo_baixa"]
+        feature_cols = ["circ_abdominal", "hdl", "triglicerideos", "pressao_sistolica", "glicemia", "tg_hdl_ratio"]
+        X = df[feature_cols]
+        y = df["testo_baixa"]
 
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
 
-    selector = SelectKBest(score_func=f_classif, k=4)
-    X_selected = selector.fit_transform(X_scaled, y)
-    selected_features = selector.get_support(indices=True)
-    selected_names = X.columns[selected_features]
+        selector = SelectKBest(score_func=f_classif, k=4)
+        X_selected = selector.fit_transform(X_scaled, y)
+        selected_features = selector.get_support(indices=True)
+        selected_names = X.columns[selected_features]
 
-    X_selected_df = pd.DataFrame(X_selected, columns=selected_names)
+        X_selected_df = pd.DataFrame(X_selected, columns=selected_names)
 
-    if smote_disponivel:
-        X_resampled, y_resampled = SMOTE(random_state=42).fit_resample(X_selected_df, y)
-        st.info("✅ Dados balanceados com SMOTE.")
-    else:
-        X_resampled, y_resampled = X_selected_df, y
-        st.warning("⚠️ SMOTE não disponível. Os dados não foram balanceados.")
+        if smote_disponivel:
+            X_resampled, y_resampled = SMOTE(random_state=42).fit_resample(X_selected_df, y)
+            st.info("✅ Dados balanceados com SMOTE.")
+        else:
+            X_resampled, y_resampled = X_selected_df, y
+            st.warning("⚠️ SMOTE não disponível. Os dados não foram balanceados.")
 
-    # Divisão
-    X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
+        # Divisão
+        X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
 
-    # Modelos
-    rf_model = RandomForestClassifier(random_state=42, class_weight='balanced')
-    log_model = LogisticRegression()
-    xgb_model = XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42)
+        # Modelos
+        rf_model = RandomForestClassifier(random_state=42, class_weight='balanced')
+        log_model = LogisticRegression()
+        xgb_model = XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42)
 
-    modelos = {
-        "Random Forest": rf_model,
-        "Regressão Logística": log_model,
-        "XGBoost": xgb_model
-    }
+        modelos = {
+            "Random Forest": rf_model,
+            "Regressão Logística": log_model,
+            "XGBoost": xgb_model
+        }
 
-    # Treinamento + Cross-validation
-    st.subheader("📊 AUC por Validação Cruzada (5-Fold)")
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    for nome, modelo in modelos.items():
-        scores = cross_val_score(modelo, X_resampled, y_resampled, cv=skf, scoring='roc_auc')
-        st.write(f"{nome}: AUC média = {scores.mean():.4f} ± {scores.std():.4f}")
-        modelo.fit(X_train, y_train)
+        # Treinamento + Cross-validation
+        st.subheader("📊 AUC por Validação Cruzada (5-Fold)")
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        for nome, modelo in modelos.items():
+            scores = cross_val_score(modelo, X_resampled, y_resampled, cv=skf, scoring='roc_auc')
+            st.write(f"{nome}: AUC média = {scores.mean():.4f} ± {scores.std():.4f}")
+            modelo.fit(X_train, y_train)
 
-    # ROC
-    y_rf = rf_model.predict_proba(X_test)[:, 1]
-    y_log = log_model.predict_proba(X_test)[:, 1]
-    y_xgb = xgb_model.predict_proba(X_test)[:, 1]
+        # ROC
+        y_rf = rf_model.predict_proba(X_test)[:, 1]
+        y_log = log_model.predict_proba(X_test)[:, 1]
+        y_xgb = xgb_model.predict_proba(X_test)[:, 1]
 
-    fpr_rf, tpr_rf, _ = roc_curve(y_test, y_rf)
-    fpr_log, tpr_log, _ = roc_curve(y_test, y_log)
-    fpr_xgb, tpr_xgb, _ = roc_curve(y_test, y_xgb)
+        fpr_rf, tpr_rf, _ = roc_curve(y_test, y_rf)
+        fpr_log, tpr_log, _ = roc_curve(y_test, y_log)
+        fpr_xgb, tpr_xgb, _ = roc_curve(y_test, y_xgb)
 
-    auc_rf = roc_auc_score(y_test, y_rf)
-    auc_log = roc_auc_score(y_test, y_log)
-    auc_xgb = roc_auc_score(y_test, y_xgb)
+        auc_rf = roc_auc_score(y_test, y_rf)
+        auc_log = roc_auc_score(y_test, y_log)
+        auc_xgb = roc_auc_score(y_test, y_xgb)
 
-    # Plot ROC
-    st.subheader("📈 Curva ROC - Comparação de Modelos")
-    fig, ax = plt.subplots(figsize=(7, 5))
-    ax.plot(fpr_rf, tpr_rf, label=f"Random Forest (AUC = {auc_rf:.2f})")
-    ax.plot(fpr_log, tpr_log, linestyle="--", label=f"Regressão Logística (AUC = {auc_log:.2f})")
-    ax.plot(fpr_xgb, tpr_xgb, linestyle=":", label=f"XGBoost (AUC = {auc_xgb:.2f})")
-    ax.plot([0, 1], [0, 1], 'k--', alpha=0.7)
-    ax.set_xlabel("Falso-positivo")
-    ax.set_ylabel("Verdadeiro-positivo")
-    ax.set_title("Curva ROC - Modelos")
-    ax.legend(loc="lower right")
-    ax.grid(True)
-    st.pyplot(fig)
+        # Plot ROC
+        st.subheader("📈 Curva ROC - Comparação de Modelos")
+        fig, ax = plt.subplots(figsize=(7, 5))
+        ax.plot(fpr_rf, tpr_rf, label=f"Random Forest (AUC = {auc_rf:.2f})")
+        ax.plot(fpr_log, tpr_log, linestyle="--", label=f"Regressão Logística (AUC = {auc_log:.2f})")
+        ax.plot(fpr_xgb, tpr_xgb, linestyle=":", label=f"XGBoost (AUC = {auc_xgb:.2f})")
+        ax.plot([0, 1], [0, 1], 'k--', alpha=0.7)
+        ax.set_xlabel("Falso-positivo")
+        ax.set_ylabel("Verdadeiro-positivo")
+        ax.set_title("Curva ROC - Modelos")
+        ax.legend(loc="lower right")
+        ax.grid(True)
+        st.pyplot(fig)
 
     # Interface de predição
     st.header("📋 Inserir dados clínicos de um novo paciente")
