@@ -8,7 +8,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, roc_curve
 from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
 from imblearn.over_sampling import SMOTE
 
 # Título
@@ -56,24 +55,18 @@ if arquivo:
     xgb_model = XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42)
     xgb_model.fit(X_train, y_train)
 
-    lgbm_model = LGBMClassifier(random_state=42)
-    lgbm_model.fit(X_train, y_train)
-
     # ROC
     y_rf = rf_model.predict_proba(X_test)[:, 1]
     y_log = log_model.predict_proba(X_test)[:, 1]
     y_xgb = xgb_model.predict_proba(X_test)[:, 1]
-    y_lgbm = lgbm_model.predict_proba(X_test)[:, 1]
 
     fpr_rf, tpr_rf, _ = roc_curve(y_test, y_rf)
     fpr_log, tpr_log, _ = roc_curve(y_test, y_log)
     fpr_xgb, tpr_xgb, _ = roc_curve(y_test, y_xgb)
-    fpr_lgbm, tpr_lgbm, _ = roc_curve(y_test, y_lgbm)
 
     auc_rf = roc_auc_score(y_test, y_rf)
     auc_log = roc_auc_score(y_test, y_log)
     auc_xgb = roc_auc_score(y_test, y_xgb)
-    auc_lgbm = roc_auc_score(y_test, y_lgbm)
 
     # Plot ROC
     st.subheader("📈 Curva ROC - Comparação de Modelos")
@@ -81,7 +74,6 @@ if arquivo:
     ax.plot(fpr_rf, tpr_rf, label=f"Random Forest (AUC = {auc_rf:.2f})")
     ax.plot(fpr_log, tpr_log, linestyle="--", label=f"Regressão Logística (AUC = {auc_log:.2f})")
     ax.plot(fpr_xgb, tpr_xgb, linestyle=":", label=f"XGBoost (AUC = {auc_xgb:.2f})")
-    ax.plot(fpr_lgbm, tpr_lgbm, linestyle="-.", label=f"LightGBM (AUC = {auc_lgbm:.2f})")
     ax.plot([0, 1], [0, 1], 'k--', alpha=0.7)
     ax.set_xlabel("Falso-positivo")
     ax.set_ylabel("Verdadeiro-positivo")
