@@ -15,7 +15,7 @@ def calcular_probabilidade(idade, diabetes, hipertri, hipertensao, hdl_baixo, ob
         "hdl": 0.289,
         "obesidade": 1.426
     }
-    intercepto = 0  # Pode ser ajustado caso disponível
+    intercepto = -2.7450974393374854  # Pode ser ajustado caso disponível
 
     escore = (
         beta["idade"] * idade +
