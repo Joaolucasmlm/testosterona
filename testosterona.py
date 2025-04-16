@@ -1,132 +1,65 @@
 import streamlit as st
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import SelectKBest, f_classif
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import roc_auc_score, roc_curve
-from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
-from xgboost import XGBClassifier
 
-try:
-    from imblearn.over_sampling import SMOTE
-    smote_disponivel = True
-except ImportError:
-    smote_disponivel = False
-
-# Título
 st.set_page_config(page_title="Preditor de Testosterona Baixa", layout="centered")
-st.title("🔬 Preditor de Testosterona Baixa com Vários Modelos")
+st.title("Preditor de Testosterona Baixa")
+st.markdown("Este aplicativo estima a probabilidade de testosterona total baixa com base em fatores da síndrome metabólica, utilizando modelo de regressão logística.")
 
-# Upload da planilha
-st.sidebar.header("📂 Carregar Planilha Excel")
-arquivo = st.sidebar.file_uploader("Escolha o arquivo .xlsx", type=["xlsx"])
+# Coeficientes da regressão logística
+def calcular_probabilidade(idade, diabetes, hipertri, hipertensao, hdl_baixo, obesidade):
+    beta = {
+        "idade": -0.195,
+        "diabetes": 0.394,
+        "hipertri": 0.606,
+        "hipertensao": 0.184,
+        "hdl": 0.289,
+        "obesidade": 1.426
+    }
+    intercepto = 0  # Pode ser ajustado caso disponível
 
-if arquivo:
-    with st.spinner("⏳ Processando e treinando os modelos..."):
-        df = pd.read_excel(arquivo)
-        st.success("Arquivo carregado com sucesso!")
+    escore = (
+        beta["idade"] * idade +
+        beta["diabetes"] * diabetes +
+        beta["hipertri"] * hipertri +
+        beta["hipertensao"] * hipertensao +
+        beta["hdl"] * hdl_baixo +
+        beta["obesidade"] * obesidade
+    ) + intercepto
 
-        # Pré-processamento
-        df["testo_baixa"] = (df["testosterona"] < 350).astype(int)
-        df["tg_hdl_ratio"] = df["triglicerideos"] / df["hdl"]
+    prob = 1 / (1 + np.exp(-escore))
+    return prob
 
-        feature_cols = ["circ_abdominal", "hdl", "triglicerideos", "pressao_sistolica", "glicemia", "tg_hdl_ratio"]
-        X = df[feature_cols]
-        y = df["testo_baixa"]
+# Interface do usuário
+st.header("Preencha os dados abaixo")
 
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
+col1, col2 = st.columns(2)
 
-        selector = SelectKBest(score_func=f_classif, k=4)
-        X_selected = selector.fit_transform(X_scaled, y)
-        selected_features = selector.get_support(indices=True)
-        selected_names = X.columns[selected_features]
+with col1:
+    idade = st.selectbox("Idade ≥ 60 anos?", ["Não", "Sim"])
+    diabetes = st.selectbox("Diabetes mellitus tipo 2?", ["Não", "Sim"])
+    hipertri = st.selectbox("Hipertrigliceridemia?", ["Não", "Sim"])
 
-        X_selected_df = pd.DataFrame(X_selected, columns=selected_names)
+with col2:
+    hipertensao = st.selectbox("Hipertensão arterial?", ["Não", "Sim"])
+    hdl_baixo = st.selectbox("HDL-colesterol baixo?", ["Não", "Sim"])
+    obesidade = st.selectbox("Obesidade?", ["Não", "Sim"])
 
-        if smote_disponivel:
-            X_resampled, y_resampled = SMOTE(random_state=42).fit_resample(X_selected_df, y)
-            st.info("✅ Dados balanceados com SMOTE.")
-        else:
-            X_resampled, y_resampled = X_selected_df, y
-            st.warning("⚠️ SMOTE não disponível. Os dados não foram balanceados.")
+# Codificar como 0 e 1
+variaveis = {
+    "idade": 1 if idade == "Sim" else 0,
+    "diabetes": 1 if diabetes == "Sim" else 0,
+    "hipertri": 1 if hipertri == "Sim" else 0,
+    "hipertensao": 1 if hipertensao == "Sim" else 0,
+    "hdl_baixo": 1 if hdl_baixo == "Sim" else 0,
+    "obesidade": 1 if obesidade == "Sim" else 0
+}
 
-        # Divisão
-        X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
+if st.button("Calcular probabilidade"):
+    prob = calcular_probabilidade(**variaveis)
+    st.subheader("Resultado")
+    st.markdown(f"Probabilidade estimada de testosterona baixa: **{prob*100:.1f}%**")
 
-        # Modelos
-        rf_model = RandomForestClassifier(random_state=42, class_weight='balanced')
-        log_model = LogisticRegression()
-        xgb_model = XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42)
-
-        modelos = {
-            "Random Forest": rf_model,
-            "Regressão Logística": log_model,
-            "XGBoost": xgb_model
-        }
-
-        # Treinamento + Cross-validation
-        st.subheader("📊 AUC por Validação Cruzada (5-Fold)")
-        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-        for nome, modelo in modelos.items():
-            scores = cross_val_score(modelo, X_resampled, y_resampled, cv=skf, scoring='roc_auc')
-            st.write(f"{nome}: AUC média = {scores.mean():.4f} ± {scores.std():.4f}")
-            modelo.fit(X_train, y_train)
-
-        # ROC
-        y_rf = rf_model.predict_proba(X_test)[:, 1]
-        y_log = log_model.predict_proba(X_test)[:, 1]
-        y_xgb = xgb_model.predict_proba(X_test)[:, 1]
-
-        fpr_rf, tpr_rf, _ = roc_curve(y_test, y_rf)
-        fpr_log, tpr_log, _ = roc_curve(y_test, y_log)
-        fpr_xgb, tpr_xgb, _ = roc_curve(y_test, y_xgb)
-
-        auc_rf = roc_auc_score(y_test, y_rf)
-        auc_log = roc_auc_score(y_test, y_log)
-        auc_xgb = roc_auc_score(y_test, y_xgb)
-
-        # Plot ROC
-        st.subheader("📈 Curva ROC - Comparação de Modelos")
-        fig, ax = plt.subplots(figsize=(7, 5))
-        ax.plot(fpr_rf, tpr_rf, label=f"Random Forest (AUC = {auc_rf:.2f})")
-        ax.plot(fpr_log, tpr_log, linestyle="--", label=f"Regressão Logística (AUC = {auc_log:.2f})")
-        ax.plot(fpr_xgb, tpr_xgb, linestyle=":", label=f"XGBoost (AUC = {auc_xgb:.2f})")
-        ax.plot([0, 1], [0, 1], 'k--', alpha=0.7)
-        ax.set_xlabel("Falso-positivo")
-        ax.set_ylabel("Verdadeiro-positivo")
-        ax.set_title("Curva ROC - Modelos")
-        ax.legend(loc="lower right")
-        ax.grid(True)
-        st.pyplot(fig)
-
-    # Interface de predição
-    st.header("📋 Inserir dados clínicos de um novo paciente")
-    circ_abdominal = st.number_input("Circunferência abdominal (cm)", value=102)
-    hdl = st.number_input("HDL (mg/dL)", value=40.0)
-    triglicerideos = st.number_input("Triglicerídeos (mg/dL)", value=150.0)
-    pressao_sistolica = st.number_input("Pressão sistólica (mmHg)", value=130.0)
-    glicemia = st.number_input("Glicemia (mg/dL)", value=100.0)
-
-    if st.button("🔍 Prever Testosterona"):
-        tg_hdl_ratio = triglicerideos / hdl
-        entrada = pd.DataFrame([[circ_abdominal, hdl, triglicerideos, pressao_sistolica, glicemia, tg_hdl_ratio]],
-                               columns=feature_cols)
-
-        entrada_scaled = scaler.transform(entrada)
-        entrada_selected = selector.transform(entrada_scaled)
-
-        prob = rf_model.predict_proba(entrada_selected)[0][1]
-        pred = rf_model.predict(entrada_selected)[0]
-
-        if pred == 1:
-            st.error(f"🔴 Predição: Testosterona Baixa (< 350 ng/dL)")
-        else:
-            st.success(f"🟢 Predição: Testosterona Normal (≥ 350 ng/dL)")
-
-        st.info(f"Probabilidade de testosterona baixa (Random Forest): {prob:.2%}")
-else:
-    st.warning("Por favor, carregue um arquivo Excel contendo os dados clínicos dos pacientes.")
+    if prob >= 0.5:
+        st.markdown("Alto risco de testosterona baixa.")
+    else:
+        st.markdown("Baixo risco de testosterona baixa.")
