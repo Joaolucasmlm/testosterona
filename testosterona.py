@@ -6,21 +6,20 @@ st.title("Preditor de Testosterona Baixa")
 st.markdown("Este aplicativo estima a probabilidade de testosterona total baixa com base em fatores da síndrome metabólica, utilizando modelo de regressão logística.")
 
 # Coeficientes da regressão logística
-def calcular_probabilidade(idade, diabetes, hipertri, hipertensao, hdl_baixo, obesidade):
+def calcular_probabilidade(diabetes, hipertrigliceridemia, hipertensao, hdl_baixo, obesidade):
     beta = {
-        "idade": -0.195,
-        "diabetes": 0.394,
-        "hipertri": 0.606,
-        "hipertensao": 0.184,
-        "hdl": 0.289,
-        "obesidade": 1.426
+        "diabetes": 0.374,
+        "hipertrigliceridemia": 0.632,
+        "hipertensao": 0.141,
+        "hdl": 0.282,
+        "obesidade": 1.432
     }
-    intercepto = -2.7450974393374854  
+    intercepto = -2.7939  
 
     escore = (
         beta["idade"] * idade +
         beta["diabetes"] * diabetes +
-        beta["hipertri"] * hipertri +
+        beta["hipertrigliceridemia"] * hipertrigliceridemia +
         beta["hipertensao"] * hipertensao +
         beta["hdl"] * hdl_baixo +
         beta["obesidade"] * obesidade
