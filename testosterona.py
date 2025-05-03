@@ -17,7 +17,6 @@ def calcular_probabilidade(diabetes, hipertrigliceridemia, hipertensao, hdl_baix
     intercepto = -2.7939  
 
     escore = (
-        beta["idade"] * idade +
         beta["diabetes"] * diabetes +
         beta["hipertrigliceridemia"] * hipertrigliceridemia +
         beta["hipertensao"] * hipertensao +
@@ -31,21 +30,17 @@ def calcular_probabilidade(diabetes, hipertrigliceridemia, hipertensao, hdl_baix
 # Interface do usuário
 st.header("Preencha os dados abaixo")
 
-col1, col2 = st.columns(2)
+col1 = st.columns(1)[0] 
 
 with col1:
-    idade = st.selectbox("Idade ≥ 60 anos?", ["Não", "Sim"])
     diabetes = st.selectbox("Diabetes mellitus tipo 2?", ["Não", "Sim"])
     hipertri = st.selectbox("Hipertrigliceridemia?", ["Não", "Sim"])
-
-with col2:
     hipertensao = st.selectbox("Hipertensão arterial?", ["Não", "Sim"])
     hdl_baixo = st.selectbox("HDL-colesterol baixo?", ["Não", "Sim"])
     obesidade = st.selectbox("Obesidade?", ["Não", "Sim"])
 
 # Codificar como 0 e 1
 variaveis = {
-    "idade": 1 if idade == "Sim" else 0,
     "diabetes": 1 if diabetes == "Sim" else 0,
     "hipertri": 1 if hipertri == "Sim" else 0,
     "hipertensao": 1 if hipertensao == "Sim" else 0,
