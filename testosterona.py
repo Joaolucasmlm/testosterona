@@ -34,7 +34,7 @@ col1 = st.columns(1)[0]
 
 with col1:
     diabetes = st.selectbox("Diabetes mellitus tipo 2?", ["Não", "Sim"])
-    hipertri = st.selectbox("Hipertrigliceridemia?", ["Não", "Sim"])
+    hipertrigliceridemia = st.selectbox("Hipertrigliceridemia?", ["Não", "Sim"])
     hipertensao = st.selectbox("Hipertensão arterial?", ["Não", "Sim"])
     hdl_baixo = st.selectbox("HDL-colesterol baixo?", ["Não", "Sim"])
     obesidade = st.selectbox("Obesidade?", ["Não", "Sim"])
@@ -42,7 +42,7 @@ with col1:
 # Codificar como 0 e 1
 variaveis = {
     "diabetes": 1 if diabetes == "Sim" else 0,
-    "hipertri": 1 if hipertri == "Sim" else 0,
+    "hipertrigliceridemia": 1 if hipertrigliceridemia == "Sim" else 0,
     "hipertensao": 1 if hipertensao == "Sim" else 0,
     "hdl_baixo": 1 if hdl_baixo == "Sim" else 0,
     "obesidade": 1 if obesidade == "Sim" else 0
